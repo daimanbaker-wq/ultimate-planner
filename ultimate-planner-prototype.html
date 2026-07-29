@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Ultimate Planner — Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --paper:#fbf9f4;
+    --paper-edge:#efe9dd;
+    --ink:#2b2926;
+    --ink-soft:#6b6560;
+    --rule:#e4ddcf;
+    --accent:#8a7a5c;
+    --p1:#c25b4a;
+    --p2:#d59a3c;
+    --p3:#6e9a6e;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(60,50,30,.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #f3efe4, #e9e3d4);
+    color:var(--ink);
+    min-height:100vh;
+    padding:28px 16px 60px;
+  }
+  h1,h2,h3{font-family:Georgia,"Times New Roman",serif; font-weight:600; margin:0;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    max-width:1180px;
+    margin:0 auto 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .brand{display:flex; align-items:baseline; gap:10px;}
+  .brand h1{font-size:22px; letter-spacing:.3px;}
+  .brand span{font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:1.5px;}
+  .search-wrap{position:relative; width:360px; max-width:100%;}
+  .search-wrap input{
+    width:100%; padding:10px 14px; border-radius:20px; border:1px solid var(--rule);
+    background:var(--paper); font-size:14px; outline:none; box-shadow:var(--shadow);
+  }
+  .search-wrap input:focus{border-color:var(--accent);}
+  .search-results{
+    position:absolute; top:calc(100% + 6px); left:0; right:0;
+    background:#fff; border:1px solid var(--rule); border-radius:12px;
+    box-shadow:var(--shadow); max-height:340px; overflow-y:auto; z-index:50; display:none;
+  }
+  .search-results.show{display:block;}
+  .search-results .empty{padding:14px; font-size:13px; color:var(--ink-soft);}
+  .sr-item{padding:9px 14px; font-size:13px; border-bottom:1px solid var(--rule); cursor:pointer;}
+  .sr-item:hover{background:#faf6ec;}
+  .sr-item:last-child{border-bottom:none;}
+  .sr-tag{
+    display:inline-block; font-size:10px; text-transform:uppercase; letter-spacing:.5px;
+    padding:2px 6px; border-radius:6px; margin-right:8px; background:#f1ece0; color:var(--accent);
+  }
+  .sr-snippet{color:var(--ink-soft);}
+
+  /* ---------- Book spread ---------- */
+  .book{
+    max-width:1180px; margin:0 auto;
+    display:grid; grid-template-columns:1fr 1fr; gap:0;
+    border-radius:14px; overflow:hidden;
+    box-shadow:0 2px 4px rgba(0,0,0,.05), 0 24px 60px rgba(50,40,20,.14);
+    background:var(--paper-edge);
+  }
+  .page{ background:var(--paper); padding:26px 26px 30px; position:relative; min-height:640px;}
+  .page.left{ border-right:1px solid var(--rule); }
+  .book::after{
+    content:""; position:absolute; left:50%; top:0; bottom:0; width:18px; margin-left:-9px;
+    background:linear-gradient(90deg, rgba(0,0,0,.05), rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,.05));
+    pointer-events:none;
+  }
+  .book{ position:relative; }
+
+  section{ margin-bottom:22px; }
+  section h2{
+    font-size:13px; text-transform:uppercase; letter-spacing:1.2px; color:var(--accent);
+    border-bottom:1px solid var(--rule); padding-bottom:6px; margin-bottom:10px;
+  }
+
+  /* ---------- Daily intention ---------- */
+  .intention-box{
+    background:#fffdf8; border:1px solid var(--rule); border-radius:10px; padding:14px;
+  }
+  #intentionInput{
+    width:100%; border:none; background:transparent; font-family:Georgia,serif; font-size:19px;
+    outline:none; padding:2px 0;
+  }
+  .intention-hint{font-size:11px; color:var(--ink-soft); margin-top:6px;}
+
+  /* ---------- Calendar header / view toggle ---------- */
+  .cal-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .cal-header h2{ margin-bottom:0; border-bottom:none; padding-bottom:0; }
+  .view-toggle{ display:flex; gap:4px; background:#f1ece0; border-radius:20px; padding:3px; }
+  .view-toggle button{
+    border:none; background:transparent; padding:5px 12px; border-radius:16px; font-size:11px;
+    cursor:pointer; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.5px;
+  }
+  .view-toggle button.active{ background:#fff; color:var(--accent); box-shadow:var(--shadow); }
+
+  .day-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .day-nav button{ border:1px solid var(--rule); background:#fff; border-radius:6px; padding:3px 9px; cursor:pointer; font-size:12px; color:var(--ink-soft); }
+  .day-nav .day-label{ font-size:12.5px; font-weight:600; }
+
+  /* ---------- Calendar (day view) ---------- */
+  .day-view{ border:1px solid var(--rule); border-radius:10px; overflow:hidden; }
+  .hour-row{
+    display:grid; grid-template-columns:56px 1fr; border-top:1px solid var(--rule); min-height:40px;
+  }
+  .hour-row:first-child{ border-top:none; }
+  .hour-label{
+    font-size:11px; color:var(--ink-soft); padding:5px 8px; border-right:1px solid var(--rule);
+    text-align:right;
+  }
+  .hour-slot{ padding:3px; transition:background .15s; }
+  .hour-slot.dragover{ background:#f2ecda; }
+  .cal-event{
+    background:#fff; border-left:3px solid var(--accent); border-radius:6px; padding:5px 8px;
+    font-size:12.5px; margin:2px 0; box-shadow:var(--shadow); cursor:grab; display:flex;
+    align-items:center; justify-content:space-between; gap:6px;
+  }
+  .cal-event.p1{ border-left-color:var(--p1); }
+  .cal-event.p2{ border-left-color:var(--p2); }
+  .cal-event.p3{ border-left-color:var(--p3); }
+  .cal-event button{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:12px; }
+  .cal-hint{ font-size:11px; color:var(--ink-soft); padding:8px 4px 0; }
+
+  /* ---------- Month view ---------- */
+  .month-view{ border:1px solid var(--rule); border-radius:10px; padding:12px; }
+  .month-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .month-nav button{ border:1px solid var(--rule); background:#fff; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:12px; color:var(--ink-soft); }
+  .month-nav .month-label{ font-size:14px; font-family:Georgia,serif; font-weight:600; }
+  .month-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .month-grid .wd{ font-size:10px; text-transform:uppercase; color:var(--ink-soft); text-align:center; padding-bottom:4px; }
+  .month-cell{
+    aspect-ratio:1; border:1px solid var(--rule); border-radius:8px; padding:5px; font-size:11.5px;
+    cursor:pointer; position:relative; background:#fbf9f4; color:var(--ink-soft);
+  }
+  .month-cell.in-month{ background:#fff; color:var(--ink); }
+  .month-cell:hover{ border-color:var(--accent); }
+  .month-cell.today{ border-color:var(--accent); border-width:2px; font-weight:600; color:var(--ink); }
+  .month-cell.selected{ background:#f2ecda; }
+  .month-dot{ position:absolute; bottom:5px; right:5px; width:6px; height:6px; border-radius:50%; background:var(--accent); }
+
+  /* ---------- Year view ---------- */
+  .year-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .mini-month{ border:1px solid var(--rule); border-radius:8px; padding:6px; background:#fff; }
+  .mini-month h4{ font-size:11px; text-align:center; margin-bottom:4px; font-family:Georgia,serif; font-weight:600; }
+  .mini-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:1px; }
+  .mini-cell{ font-size:8.5px; text-align:center; padding:2px 0; border-radius:3px; cursor:pointer; color:var(--ink-soft); }
+  .mini-cell.wd-label{ font-weight:600; cursor:default; color:var(--ink-soft); }
+  .mini-cell.in-month{ color:var(--ink); }
+  .mini-cell.in-month:hover{ background:#f2ecda; }
+  .mini-cell.today{ background:var(--accent); color:#fff; font-weight:600; }
+  .mini-cell.has-event::after{ content:""; display:block; width:3px; height:3px; border-radius:50%; background:var(--accent); margin:1px auto 0; }
+  .mini-cell.today.has-event::after{ background:#fff; }
+
+  /* ---------- Task list ---------- */
+  .todo-list{ list-style:none; margin:0; padding:0; }
+  .todo-item{
+    display:flex; align-items:center; gap:8px; background:#fff; border:1px solid var(--rule);
+    border-radius:8px; padding:8px 10px; margin-bottom:6px; cursor:grab; box-shadow:var(--shadow);
+  }
+  .todo-item.scheduled{ opacity:.7; }
+  .pdot{ width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
+  .pdot.p1{ background:var(--p1); }
+  .pdot.p2{ background:var(--p2); }
+  .pdot.p3{ background:var(--p3); }
+  .todo-title-input{
+    flex:1; border:none; background:transparent; font-size:13.5px; font-family:inherit; color:var(--ink);
+    outline:none; padding:2px 0; min-width:0;
+  }
+  .todo-title-input:focus{ border-bottom:1px solid var(--accent); }
+  .late-badge{
+    font-size:9px; text-transform:uppercase; letter-spacing:.5px; background:#f7e4df; color:var(--p1);
+    padding:2px 6px; border-radius:6px; flex:0 0 auto;
+  }
+  .todo-meta{ font-size:10.5px; color:var(--ink-soft); flex:0 0 auto; }
+  .todo-item select{
+    font-size:10.5px; border:1px solid var(--rule); border-radius:6px; background:#fffdf8; color:var(--ink-soft);
+    flex:0 0 auto;
+  }
+  .todo-item button.del{ background:none; border:none; color:var(--ink-soft); cursor:pointer; flex:0 0 auto; }
+  .task-dropzone{
+    border:1.5px dashed var(--rule); border-radius:8px; padding:10px; text-align:center;
+    font-size:11.5px; color:var(--ink-soft); margin-bottom:8px; transition:background .15s;
+  }
+  .task-dropzone.dragover{ background:#f2ecda; border-color:var(--accent); }
+  .add-row{ display:flex; gap:6px; margin-top:8px; }
+  .add-row input, .add-row select{
+    flex:1; padding:7px 10px; border:1px solid var(--rule); border-radius:8px; font-size:13px;
+    background:#fffdf8; outline:none;
+  }
+  .add-row button{
+    border:none; background:var(--accent); color:#fff; padding:7px 12px; border-radius:8px;
+    font-size:13px; cursor:pointer;
+  }
+  .add-row button:hover{ opacity:.9; }
+  .link-btn{
+    background:none; border:none; color:var(--accent); font-size:11.5px; cursor:pointer;
+    text-decoration:underline; text-underline-offset:2px;
+  }
+
+  /* ---------- Notes ---------- */
+  .note-card{
+    background:#fffdf8; border:1px solid var(--rule); border-radius:8px; padding:8px 10px; margin-bottom:8px;
+  }
+  .note-card textarea{
+    width:100%; border:none; background:transparent; font-size:13px; resize:vertical; outline:none;
+    font-family:inherit; min-height:44px;
+  }
+  .note-meta{ display:flex; justify-content:space-between; font-size:10.5px; color:var(--ink-soft); margin-top:4px; }
+  .empty-note{ font-size:12px; color:var(--ink-soft); font-style:italic; }
+
+  .review-btn{
+    display:block; margin:24px auto 0; padding:10px 20px; border-radius:20px; border:1px solid var(--accent);
+    background:transparent; color:var(--accent); font-size:13px; cursor:pointer;
+  }
+  .review-btn:hover{ background:var(--accent); color:#fff; }
+
+  /* ---------- Modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(30,25,15,.35); display:none; align-items:center; justify-content:center; z-index:100;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal{
+    background:var(--paper); border-radius:14px; padding:24px; width:420px; max-width:92vw; box-shadow:var(--shadow);
+  }
+  .modal h3{ margin-bottom:12px; }
+  .modal input{
+    width:100%; border:1px solid var(--rule); border-radius:8px; padding:8px; font-size:13px; font-family:inherit;
+  }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  .modal-actions button{ padding:7px 14px; border-radius:8px; border:1px solid var(--rule); background:#fff; cursor:pointer; font-size:13px; }
+  .modal-actions button.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .review-list{ margin:8px 0 0; padding-left:18px; font-size:12.5px; }
+  .review-list li{ margin-bottom:4px; }
+  .rollover-warn{ color:var(--p1); font-size:11px; margin-left:6px; }
+
+  .archive-row{ display:flex; align-items:center; gap:8px; padding:6px 4px; border-bottom:1px solid var(--rule); font-size:12.5px; }
+  .archive-row:last-child{ border-bottom:none; }
+  .archive-title{ flex:1; }
+  .archive-date{ font-size:10.5px; color:var(--ink-soft); }
+
+  /* ---------- Search-result / navigation highlight ---------- */
+  .flash{ animation: flashPulse 1.6s ease; }
+  @keyframes flashPulse{
+    0%{ box-shadow:0 0 0 0 rgba(138,122,92,.55); }
+    100%{ box-shadow:0 0 0 14px rgba(138,122,92,0); }
+  }
+
+  @media (max-width:860px){
+    .book{ grid-template-columns:1fr; }
+    .page.left{ border-right:none; border-bottom:1px solid var(--rule); }
+    .book::after{ display:none; }
+    .year-grid{ grid-template-columns:repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <h1>The Ultimate Planner</h1>
+    <span id="todayLabel"></span>
+  </div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search tasks, notes, calendar, archive…" autocomplete="off">
+    <div class="search-results" id="searchResults"></div>
+  </div>
+</div>
+
+<div class="book">
+
+  <!-- ================= LEFT PAGE ================= -->
+  <div class="page left">
+
+    <section>
+      <h2>Today I Want To</h2>
+      <div class="intention-box">
+        <input id="intentionInput" type="text" placeholder="e.g. Finish Savoy proposal">
+        <div class="intention-hint">Saved automatically · searchable later</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="cal-header">
+        <h2>Calendar</h2>
+        <div class="view-toggle">
+          <button id="dayViewBtn" class="active" onclick="switchView('day')">Day</button>
+          <button id="monthViewBtn" onclick="switchView('month')">Month</button>
+          <button id="yearViewBtn" onclick="switchView('year')">Year</button>
+        </div>
+      </div>
+
+      <div id="dayViewWrap">
+        <div class="day-nav">
+          <button onclick="shiftDay(-1)">‹ Prev</button>
+          <span class="day-label" id="dayLabel"></span>
+          <button onclick="shiftDay(1)">Next ›</button>
+        </div>
+        <div class="day-view" id="dayView"></div>
+        <div class="cal-hint">Drag a task from the right-hand page onto a time slot to schedule it.</div>
+      </div>
+
+      <div id="monthViewWrap" class="month-view" style="display:none;">
+        <div class="month-nav">
+          <button onclick="shiftMonth(-1)">‹ Prev</button>
+          <span class="month-label" id="monthLabel"></span>
+          <button onclick="shiftMonth(1)">Next ›</button>
+        </div>
+        <div class="month-grid" id="monthGrid"></div>
+        <div class="cal-hint">Click a day to open it in Day view.</div>
+      </div>
+
+      <div id="yearViewWrap" style="display:none;">
+        <div class="month-nav">
+          <button onclick="shiftYear(-1)">‹ Prev</button>
+          <span class="month-label" id="yearLabel"></span>
+          <button onclick="shiftYear(1)">Next ›</button>
+        </div>
+        <div class="year-grid" id="yearGrid"></div>
+        <div class="cal-hint">Click a day to open it in Day view.</div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ================= RIGHT PAGE ================= -->
+  <div class="page right">
+
+    <section>
+      <div class="cal-header">
+        <h2>To-Do List</h2>
+        <button class="link-btn" onclick="openArchive()">Archive (<span id="archiveCount">0</span>)</button>
+      </div>
+      <div class="task-dropzone" id="taskDropzone">Drop a scheduled item here to unschedule it — titles are editable, just click in</div>
+      <div class="add-row">
+        <input id="taskInput" type="text" placeholder="New task…">
+        <select id="taskPriority">
+          <option value="p1">P1 · High</option>
+          <option value="p2" selected>P2 · Medium</option>
+          <option value="p3">P3 · Low</option>
+        </select>
+        <button onclick="addTask()">Add</button>
+      </div>
+      <ul class="todo-list" id="todoList" style="margin-top:10px;"></ul>
+    </section>
+
+    <section>
+      <h2>Notes</h2>
+      <div id="notesList"></div>
+      <div class="add-row">
+        <button onclick="addNote()" style="flex:none;">+ New note</button>
+      </div>
+    </section>
+
+    <button class="review-btn" onclick="openReview()">End-of-day review</button>
+
+  </div>
+
+</div>
+
+<!-- ---------- Daily review modal ---------- -->
+<div class="modal-backdrop" id="reviewModal">
+  <div class="modal">
+    <h3>Daily Review</h3>
+    <div id="reviewSummary" style="font-size:13px; color:var(--ink-soft);"></div>
+    <div class="modal-actions">
+      <button onclick="closeReview()">Not yet</button>
+      <button class="primary" onclick="carryForward()">Carry forward &amp; close day</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- Archive modal ---------- -->
+<div class="modal-backdrop" id="archiveModal">
+  <div class="modal" style="width:480px;">
+    <h3>Archive</h3>
+    <input id="archiveSearch" type="text" placeholder="Search completed items…" oninput="renderArchiveList()">
+    <div id="archiveList" style="max-height:340px; overflow-y:auto; margin-top:10px;"></div>
+    <div class="modal-actions">
+      <button onclick="closeArchive()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   STATE  (in-memory only — no localStorage, per session)
+   ========================================================= */
+let idCounter = 1;
+const nextId = () => idCounter++;
+
+const state = {
+  intention: "",
+  tasks: [],                  // {id, title, priority, status, scheduled:{hour}|null, late}
+  calendarEvents: [],         // {id, taskId, title, priority, hour, date:"YYYY-MM-DD"}
+  notes: [],                  // {id, text, ts}
+  archive: [],                // {id, title, priority, completedDate}
+  currentDate: new Date(),    // date currently shown in Day view
+  viewMonth: new Date(),      // month currently shown in Month view
+  viewYear: new Date()        // year currently shown in Year view
+};
+
+let currentViewMode = "day";
+
+const HOURS = Array.from({length:16}, (_,i) => 6 + i); // 6:00 - 21:00
+const STATUSES = ["Not Started", "In Progress", "Completed"];
+
+/* =========================================================
+   INIT
+   ========================================================= */
+function fmtHour(h){
+  const period = h >= 12 ? "PM" : "AM";
+  const hr = ((h + 11) % 12) + 1;
+  return `${hr}:00 ${period}`;
+}
+
+// Local (not UTC) date key so day boundaries match the user's calendar, not GMT.
+function dateKey(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function init(){
+  document.getElementById("todayLabel").textContent =
+    new Date().toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" });
+
+  // seed a couple of examples so drag-and-drop and the archive are obvious on first load
+  state.tasks.push({id: nextId(), title:"Prepare Savoy presentation", priority:"p1", status:"Not Started", scheduled:null, late:false});
+  state.tasks.push({id: nextId(), title:"Review Q3 board pack", priority:"p2", status:"Not Started", scheduled:null, late:false});
+  state.notes.push({id: nextId(), text:"", ts: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})});
+  state.archive.push({id: nextId(), title:"Confirm venue for offsite", priority:"p3", completedDate: dateKey(new Date())});
+
+  buildDayView();
+  render();
+
+  document.getElementById("intentionInput").addEventListener("input", e=>{
+    state.intention = e.target.value;
+  });
+  document.getElementById("searchInput").addEventListener("input", runSearch);
+  document.addEventListener("click", (e)=>{
+    if(!e.target.closest(".search-wrap")) document.getElementById("searchResults").classList.remove("show");
+  });
+}
+
+/* =========================================================
+   VIEW SWITCHING — Day / Month / Year
+   ========================================================= */
+function switchView(view){
+  currentViewMode = view;
+  document.getElementById("dayViewBtn").classList.toggle("active", view === "day");
+  document.getElementById("monthViewBtn").classList.toggle("active", view === "month");
+  document.getElementById("yearViewBtn").classList.toggle("active", view === "year");
+  document.getElementById("dayViewWrap").style.display = view === "day" ? "" : "none";
+  document.getElementById("monthViewWrap").style.display = view === "month" ? "" : "none";
+  document.getElementById("yearViewWrap").style.display = view === "year" ? "" : "none";
+  if(view === "month"){
+    state.viewMonth = new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), 1);
+    buildMonthView();
+  }
+  if(view === "year"){
+    state.viewYear = new Date(state.currentDate.getFullYear(), 0, 1);
+    buildYearView();
+  }
+}
+
+function shiftDay(delta){
+  const d = new Date(state.currentDate);
+  d.setDate(d.getDate() + delta);
+  state.currentDate = d;
+  render();
+}
+
+function selectDay(d){
+  state.currentDate = d;
+  switchView("day");
+  render();
+}
+
+function shiftMonth(delta){
+  state.viewMonth = new Date(state.viewMonth.getFullYear(), state.viewMonth.getMonth() + delta, 1);
+  buildMonthView();
+}
+
+function shiftYear(delta){
+  state.viewYear = new Date(state.viewYear.getFullYear() + delta, 0, 1);
+  buildYearView();
+}
+
+function updateDayLabel(){
+  document.getElementById("dayLabel").textContent =
+    state.currentDate.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" });
+}
+
+/* =========================================================
+   DAY VIEW / CALENDAR
+   ========================================================= */
+function buildDayView(){
+  const el = document.getElementById("dayView");
+  el.innerHTML = "";
+  HOURS.forEach(h=>{
+    const row = document.createElement("div");
+    row.className = "hour-row";
+    row.innerHTML = `<div class="hour-label">${fmtHour(h)}</div><div class="hour-slot" data-hour="${h}"></div>`;
+    el.appendChild(row);
+  });
+
+  el.querySelectorAll(".hour-slot").forEach(slot=>{
+    slot.addEventListener("dragover", e=>{ e.preventDefault(); slot.classList.add("dragover"); });
+    slot.addEventListener("dragleave", ()=> slot.classList.remove("dragover"));
+    slot.addEventListener("drop", e=>{
+      e.preventDefault();
+      slot.classList.remove("dragover");
+      const hour = Number(slot.dataset.hour);
+      const payload = JSON.parse(e.dataTransfer.getData("text/plain") || "{}");
+      handleDropOnCalendar(payload, hour);
+    });
+  });
+}
+
+function handleDropOnCalendar(payload, hour){
+  const today = dateKey(state.currentDate);
+  if(payload.kind === "task"){
+    const task = state.tasks.find(t=>t.id===payload.id);
+    if(!task) return;
+    task.scheduled = { hour };
+    task.late = false; // rescheduling resolves a rollover
+    state.calendarEvents.push({ id: nextId(), taskId: task.id, title: task.title, priority: task.priority, hour, date: today });
+  } else if(payload.kind === "calEvent"){
+    // moving an existing event to a new hour (same day)
+    const ev = state.calendarEvents.find(c=>c.id===payload.id);
+    if(ev){ ev.hour = hour; const t = state.tasks.find(t=>t.id===ev.taskId); if(t) t.scheduled = {hour}; }
+  }
+  render();
+}
+
+function removeCalEvent(evId){
+  const ev = state.calendarEvents.find(c=>c.id===evId);
+  if(!ev) return;
+  if(ev.taskId){
+    const task = state.tasks.find(t=>t.id===ev.taskId);
+    if(task){ task.scheduled = null; }
+  }
+  state.calendarEvents = state.calendarEvents.filter(c=>c.id!==evId);
+  render();
+}
+
+/* =========================================================
+   MONTH VIEW
+   ========================================================= */
+function buildMonthView(){
+  const grid = document.getElementById("monthGrid");
+  const label = document.getElementById("monthLabel");
+  const viewMonth = state.viewMonth;
+  label.textContent = viewMonth.toLocaleDateString(undefined, { month:"long", year:"numeric" });
+
+  grid.innerHTML = "";
+  ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].forEach(wd=>{
+    const el = document.createElement("div");
+    el.className = "wd";
+    el.textContent = wd;
+    grid.appendChild(el);
+  });
+
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const startOffset = (firstOfMonth.getDay() + 6) % 7;           // Monday-first index
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+
+  const todayKey = dateKey(new Date());
+  const selectedKey = dateKey(state.currentDate);
+
+  for(let i = 0; i < totalCells; i++){
+    let cellDate;
+    const cell = document.createElement("div");
+    if(i < startOffset){
+      cellDate = new Date(year, month - 1, daysInPrevMonth - startOffset + i + 1);
+      cell.className = "month-cell";
+    } else if(i >= startOffset + daysInMonth){
+      cellDate = new Date(year, month + 1, i - startOffset - daysInMonth + 1);
+      cell.className = "month-cell";
+    } else {
+      cellDate = new Date(year, month, i - startOffset + 1);
+      cell.className = "month-cell in-month";
+    }
+    const key = dateKey(cellDate);
+    if(key === todayKey) cell.classList.add("today");
+    if(key === selectedKey) cell.classList.add("selected");
+
+    const eventCount = state.calendarEvents.filter(ev=>ev.date===key).length;
+    cell.innerHTML = `${cellDate.getDate()}` + (eventCount ? `<span class="month-dot"></span>` : "");
+    cell.onclick = () => selectDay(cellDate);
+    grid.appendChild(cell);
+  }
+}
+
+/* =========================================================
+   YEAR VIEW
+   ========================================================= */
+function buildYearView(){
+  const grid = document.getElementById("yearGrid");
+  const label = document.getElementById("yearLabel");
+  const year = state.viewYear.getFullYear();
+  label.textContent = String(year);
+  grid.innerHTML = "";
+
+  const todayKey = dateKey(new Date());
+
+  for(let m = 0; m < 12; m++){
+    const box = document.createElement("div");
+    box.className = "mini-month";
+    const monthName = new Date(year, m, 1).toLocaleDateString(undefined, { month:"long" });
+
+    let html = `<h4>${monthName}</h4><div class="mini-grid">`;
+    ["M","T","W","T","F","S","S"].forEach(d => html += `<div class="mini-cell wd-label">${d}</div>`);
+
+    const firstOfMonth = new Date(year, m, 1);
+    const startOffset = (firstOfMonth.getDay() + 6) % 7;
+    const daysInMonth = new Date(year, m + 1, 0).getDate();
+
+    for(let i = 0; i < startOffset; i++) html += `<div class="mini-cell"></div>`;
+    for(let day = 1; day <= daysInMonth; day++){
+      const cellDate = new Date(year, m, day);
+      const key = dateKey(cellDate);
+      const hasEvent = state.calendarEvents.some(ev=>ev.date===key);
+      const classes = ["mini-cell", "in-month"];
+      if(key === todayKey) classes.push("today");
+      if(hasEvent) classes.push("has-event");
+      html += `<div class="${classes.join(" ")}" onclick="selectDay(new Date(${year}, ${m}, ${day}))">${day}</div>`;
+    }
+    html += `</div>`;
+    box.innerHTML = html;
+    grid.appendChild(box);
+  }
+}
+
+/* =========================================================
+   TASKS
+   ========================================================= */
+function addTask(){
+  const input = document.getElementById("taskInput");
+  const priority = document.getElementById("taskPriority").value;
+  const title = input.value.trim();
+  if(!title) return;
+  state.tasks.push({ id: nextId(), title, priority, status:"Not Started", scheduled:null, late:false });
+  input.value = "";
+  render();
+}
+
+function updateTaskTitle(id, value){
+  const t = state.tasks.find(t=>t.id===id);
+  if(t) t.title = value.trim() || t.title;
+  render();
+}
+
+// Marking a task complete archives it immediately, keeping the To-Do list short.
+function completeTask(id){
+  const idx = state.tasks.findIndex(t=>t.id===id);
+  if(idx === -1) return;
+  const t = state.tasks[idx];
+  state.tasks.splice(idx, 1);
+  state.calendarEvents = state.calendarEvents.filter(ev=>ev.taskId!==id);
+  state.archive.unshift({ id: t.id, title: t.title, priority: t.priority, completedDate: dateKey(state.currentDate) });
+  render();
+}
+
+function setTaskStatus(id, status){
+  if(status === "Completed"){ completeTask(id); return; }
+  const t = state.tasks.find(t=>t.id===id);
+  if(t) t.status = status;
+  render();
+}
+
+function deleteTask(id){
+  state.tasks = state.tasks.filter(t=>t.id!==id);
+  state.calendarEvents = state.calendarEvents.filter(e=>e.taskId!==id);
+  render();
+}
+
+/* =========================================================
+   NOTES
+   ========================================================= */
+function addNote(){
+  state.notes.unshift({ id: nextId(), text:"", ts: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) });
+  render();
+}
+function updateNote(id, text){
+  const n = state.notes.find(n=>n.id===id);
+  if(n) n.text = text;
+}
+function deleteNote(id){
+  state.notes = state.notes.filter(n=>n.id!==id);
+  render();
+}
+
+/* =========================================================
+   ARCHIVE
+   ========================================================= */
+function openArchive(){
+  document.getElementById("archiveModal").classList.add("show");
+  renderArchiveList();
+}
+function closeArchive(){
+  document.getElementById("archiveModal").classList.remove("show");
+}
+function renderArchiveList(){
+  const q = (document.getElementById("archiveSearch").value || "").trim().toLowerCase();
+  const list = document.getElementById("archiveList");
+  const items = state.archive.filter(a => !q || a.title.toLowerCase().includes(q));
+  list.innerHTML = items.length
+    ? items.map(a => `
+      <div class="archive-row" id="archive-${a.id}">
+        <span class="pdot ${a.priority}"></span>
+        <span class="archive-title">${escapeHtml(a.title)}</span>
+        <span class="archive-date">${a.completedDate}</span>
+        <button class="link-btn" onclick="unarchiveTask(${a.id})">Restore</button>
+      </div>`).join("")
+    : `<div class="empty-note">No completed items yet.</div>`;
+}
+
+// Move a completed item back to the active To-Do list — for when "done" turns out to need more work.
+function unarchiveTask(id){
+  const idx = state.archive.findIndex(a=>a.id===id);
+  if(idx === -1) return;
+  const a = state.archive[idx];
+  state.archive.splice(idx, 1);
+  state.tasks.push({ id: a.id, title: a.title, priority: a.priority, status:"In Progress", scheduled:null, late:false });
+  renderArchiveList();
+  render();
+}
+
+/* =========================================================
+   SEARCH — global, across intention/tasks/calendar/notes/archive
+   ========================================================= */
+function runSearch(e){
+  const q = e.target.value.trim().toLowerCase();
+  const box = document.getElementById("searchResults");
+  if(!q){ box.classList.remove("show"); box.innerHTML=""; return; }
+
+  const results = [];
+  if(state.intention.toLowerCase().includes(q)){
+    results.push({ tag:"Intention", snippet: state.intention, kind:"intention" });
+  }
+  state.tasks.forEach(t=>{
+    if(t.title.toLowerCase().includes(q)) results.push({ tag:"Task", snippet:t.title, kind:"task", id:t.id });
+  });
+  state.calendarEvents.forEach(ev=>{
+    if(ev.title.toLowerCase().includes(q)) results.push({ tag:"Calendar", snippet:`${ev.title} · ${fmtHour(ev.hour)} · ${ev.date}`, kind:"calendar", id:ev.id });
+  });
+  state.notes.forEach(n=>{
+    if(n.text.toLowerCase().includes(q)) results.push({ tag:"Note", snippet:n.text.slice(0,60) || "(empty note)", kind:"note", id:n.id });
+  });
+  state.archive.forEach(a=>{
+    if(a.title.toLowerCase().includes(q)) results.push({ tag:"Archive", snippet:`${a.title} · completed ${a.completedDate}`, kind:"archive", id:a.id });
+  });
+
+  box.innerHTML = results.length
+    ? results.map(r=>`<div class="sr-item" onclick="goToResult('${r.kind}', ${r.id ?? "null"})"><span class="sr-tag">${r.tag}</span><span class="sr-snippet">${escapeHtml(r.snippet)}</span></div>`).join("")
+    : `<div class="empty">No matches.</div>`;
+  box.classList.add("show");
+}
+
+function flashHighlight(el){
+  if(!el) return;
+  el.classList.add("flash");
+  setTimeout(()=> el.classList.remove("flash"), 1600);
+}
+
+function goToResult(kind, id){
+  document.getElementById("searchResults").classList.remove("show");
+  document.getElementById("searchInput").blur();
+
+  if(kind === "intention"){
+    document.getElementById("intentionInput").focus();
+    flashHighlight(document.querySelector(".intention-box"));
+    return;
+  }
+  if(kind === "task"){
+    const el = document.getElementById(`task-${id}`);
+    if(el){ el.scrollIntoView({behavior:"smooth", block:"center"}); flashHighlight(el); }
+    return;
+  }
+  if(kind === "note"){
+    const el = document.getElementById(`note-${id}`);
+    if(el){ el.scrollIntoView({behavior:"smooth", block:"center"}); flashHighlight(el); }
+    return;
+  }
+  if(kind === "calendar"){
+    const ev = state.calendarEvents.find(e=>e.id===id);
+    if(!ev) return;
+    const [y, m, d] = ev.date.split("-").map(Number);
+    state.currentDate = new Date(y, m - 1, d);
+    switchView("day");
+    render();
+    setTimeout(()=>{
+      const el = document.getElementById(`calevent-${id}`);
+      if(el){ el.scrollIntoView({behavior:"smooth", block:"center"}); flashHighlight(el); }
+    }, 30);
+    return;
+  }
+  if(kind === "archive"){
+    openArchive();
+    document.getElementById("archiveSearch").value = "";
+    renderArchiveList();
+    setTimeout(()=>{
+      const el = document.getElementById(`archive-${id}`);
+      if(el){ el.scrollIntoView({behavior:"smooth", block:"center"}); flashHighlight(el); }
+    }, 30);
+    return;
+  }
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+/* =========================================================
+   DAILY REVIEW
+   ========================================================= */
+function openReview(){
+  const todayKey = dateKey(state.currentDate);
+  const doneToday = state.archive.filter(a=>a.completedDate===todayKey).length;
+  const remaining = state.tasks;
+
+  const summary = document.getElementById("reviewSummary");
+  summary.innerHTML = `<strong>${doneToday}</strong> task(s) completed today.<br><strong>${remaining.length}</strong> remaining:` +
+    (remaining.length
+      ? `<ul class="review-list">${remaining.map(t=>
+          `<li>${escapeHtml(t.title)}<span class="rollover-warn">⚠ will roll over to tomorrow${t.scheduled ? " (currently scheduled — will be unscheduled)" : ""}</span></li>`
+        ).join("")}</ul>`
+      : " —");
+
+  document.getElementById("reviewModal").classList.add("show");
+}
+function closeReview(){ document.getElementById("reviewModal").classList.remove("show"); }
+function carryForward(){
+  state.tasks.forEach(t=>{
+    t.late = true;
+    t.scheduled = null;
+  });
+  state.calendarEvents = []; // all remaining events belonged to now-unscheduled, rolled-over tasks
+  closeReview();
+  render();
+}
+
+/* =========================================================
+   RENDER
+   ========================================================= */
+function render(){
+  // ---- Tasks ----
+  const todoList = document.getElementById("todoList");
+  todoList.innerHTML = "";
+  state.tasks.forEach(task=>{
+    const li = document.createElement("li");
+    li.id = `task-${task.id}`;
+    li.className = "todo-item" + (task.scheduled ? " scheduled" : "");
+    li.draggable = true;
+    li.innerHTML = `
+      <input type="checkbox" onchange="completeTask(${task.id})">
+      <span class="pdot ${task.priority}"></span>
+      <input class="todo-title-input" type="text" value="${escapeHtml(task.title)}" onchange="updateTaskTitle(${task.id}, this.value)">
+      ${task.late ? `<span class="late-badge">Late</span>` : ""}
+      ${task.scheduled ? `<span class="todo-meta">${fmtHour(task.scheduled.hour)}</span>` : ""}
+      <select onchange="setTaskStatus(${task.id}, this.value)">
+        ${STATUSES.map(s=>`<option ${s===task.status?"selected":""}>${s}</option>`).join("")}
+      </select>
+      <button class="del" onclick="deleteTask(${task.id})">✕</button>`;
+    li.addEventListener("dragstart", e=>{
+      e.dataTransfer.setData("text/plain", JSON.stringify({kind:"task", id:task.id}));
+    });
+    todoList.appendChild(li);
+  });
+
+  document.getElementById("archiveCount").textContent = state.archive.length;
+
+  // ---- Task dropzone (unschedule) ----
+  const dz = document.getElementById("taskDropzone");
+  dz.ondragover = e=>{ e.preventDefault(); dz.classList.add("dragover"); };
+  dz.ondragleave = ()=> dz.classList.remove("dragover");
+  dz.ondrop = e=>{
+    e.preventDefault();
+    dz.classList.remove("dragover");
+    const payload = JSON.parse(e.dataTransfer.getData("text/plain") || "{}");
+    if(payload.kind === "calEvent"){
+      const ev = state.calendarEvents.find(c=>c.id===payload.id);
+      if(ev && ev.taskId){
+        const t = state.tasks.find(t=>t.id===ev.taskId);
+        if(t){ t.scheduled = null; }
+      }
+      state.calendarEvents = state.calendarEvents.filter(c=>c.id!==payload.id);
+      render();
+    }
+  };
+
+  // ---- Day label + calendar events (for the currently viewed date) ----
+  updateDayLabel();
+  const viewedDate = dateKey(state.currentDate);
+  document.querySelectorAll(".hour-slot").forEach(slot=>{
+    slot.innerHTML = "";
+    const hour = Number(slot.dataset.hour);
+    state.calendarEvents.filter(ev=>ev.hour===hour && ev.date===viewedDate).forEach(ev=>{
+      const div = document.createElement("div");
+      div.id = `calevent-${ev.id}`;
+      div.className = "cal-event " + ev.priority;
+      div.draggable = true;
+      div.innerHTML = `<span>${escapeHtml(ev.title)}</span><button onclick="removeCalEvent(${ev.id})">✕</button>`;
+      div.addEventListener("dragstart", e=>{
+        e.dataTransfer.setData("text/plain", JSON.stringify({kind:"calEvent", id:ev.id}));
+      });
+      slot.appendChild(div);
+    });
+  });
+
+  // ---- Notes ----
+  const notesList = document.getElementById("notesList");
+  notesList.innerHTML = "";
+  if(state.notes.length === 0){
+    notesList.innerHTML = `<div class="empty-note">No notes yet.</div>`;
+  }
+  state.notes.forEach(note=>{
+    const card = document.createElement("div");
+    card.id = `note-${note.id}`;
+    card.className = "note-card";
+    card.innerHTML = `
+      <textarea placeholder="Meeting notes, ideas, reflections…" onchange="updateNote(${note.id}, this.value)">${escapeHtml(note.text)}</textarea>
+      <div class="note-meta"><span>${note.ts}</span><button class="del" onclick="deleteNote(${note.id})">Delete</button></div>`;
+    notesList.appendChild(card);
+  });
+
+  // ---- Keep Month/Year view in sync if currently open ----
+  if(currentViewMode === "month") buildMonthView();
+  if(currentViewMode === "year") buildYearView();
+}
+
+init();
+</script>
+</body>
+</html>

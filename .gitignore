@@ -1,0 +1,54 @@
+# ---- Secrets & credentials ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+secrets/
+credentials.json
+service-account*.json
+google-credentials.json
+*-credentials.json
+auth.json
+.npmrc
+.yarnrc
+.netrc
+
+# ---- Cloud / infra credentials ----
+.aws/
+.gcp/
+.azure/
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# ---- Local config / personal data ----
+*.local
+config.local.*
+*.sqlite
+*.sqlite3
+*.db
+
+# ---- Dependencies & build output (future Node/React build) ----
+node_modules/
+dist/
+build/
+.next/
+.vercel/
+.netlify/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Editor / OS clutter ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
