@@ -411,6 +411,43 @@ const state = {
   viewYear: new Date()        // year currently shown in Year view
 };
 
+/* =========================================================
+   PERSISTENCE  (localStorage)
+   ========================================================= */
+function saveState(){
+  const data = {
+    intention: state.intention,
+    tasks: state.tasks,
+    calendarEvents: state.calendarEvents,
+    notes: state.notes,
+    archive: state.archive,
+    currentDate: state.currentDate.toISOString(),
+    viewMonth: state.viewMonth.toISOString(),
+    viewYear: state.viewYear.toISOString(),
+    idCounter: idCounter
+  };
+  try { localStorage.setItem("planner_state", JSON.stringify(data)); } catch(e) { /* storage full or unavailable */ }
+}
+function loadState(){
+  try {
+    const raw = localStorage.getItem("planner_state");
+    if(!raw) return false;
+    const data = JSON.parse(raw);
+    state.intention = data.intention || "";
+    state.tasks = data.tasks || [];
+    state.calendarEvents = data.calendarEvents || [];
+    state.notes = data.notes || [];
+    state.archive = data.archive || [];
+    state.currentDate = data.currentDate ? new Date(data.currentDate) : new Date();
+    state.viewMonth = data.viewMonth ? new Date(data.viewMonth) : new Date();
+    state.viewYear = data.viewYear ? new Date(data.viewYear) : new Date();
+    if(typeof data.idCounter === "number") idCounter = data.idCounter;
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
 let currentViewMode = "day";
 
 const HOURS = Array.from({length:16}, (_,i) => 6 + i); // 6:00 - 21:00
@@ -434,17 +471,21 @@ function init(){
   document.getElementById("todayLabel").textContent =
     new Date().toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" });
 
-  // seed a couple of examples so drag-and-drop and the archive are obvious on first load
-  state.tasks.push({id: nextId(), title:"Prepare Savoy presentation", priority:"p1", status:"Not Started", scheduled:null, late:false});
-  state.tasks.push({id: nextId(), title:"Review Q3 board pack", priority:"p2", status:"Not Started", scheduled:null, late:false});
-  state.notes.push({id: nextId(), text:"", ts: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})});
-  state.archive.push({id: nextId(), title:"Confirm venue for offsite", priority:"p3", completedDate: dateKey(new Date())});
+  // Restore saved state from localStorage, or seed examples on first visit
+  const hasSaved = loadState();
+  if(!hasSaved){
+    state.tasks.push({id: nextId(), title:"Prepare Savoy presentation", priority:"p1", status:"Not Started", scheduled:null, late:false});
+    state.tasks.push({id: nextId(), title:"Review Q3 board pack", priority:"p2", status:"Not Started", scheduled:null, late:false});
+    state.notes.push({id: nextId(), text:"", ts: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})});
+    state.archive.push({id: nextId(), title:"Confirm venue for offsite", priority:"p3", completedDate: dateKey(new Date())});
+  }
 
   buildDayView();
   render();
 
   document.getElementById("intentionInput").addEventListener("input", e=>{
     state.intention = e.target.value;
+    saveState();
   });
   document.getElementById("searchInput").addEventListener("input", runSearch);
   document.addEventListener("click", (e)=>{
@@ -540,6 +581,7 @@ function handleDropOnCalendar(payload, hour){
     const ev = state.calendarEvents.find(c=>c.id===payload.id);
     if(ev){ ev.hour = hour; const t = state.tasks.find(t=>t.id===ev.taskId); if(t) t.scheduled = {hour}; }
   }
+  saveState();
   render();
 }
 
@@ -551,6 +593,7 @@ function removeCalEvent(evId){
     if(task){ task.scheduled = null; }
   }
   state.calendarEvents = state.calendarEvents.filter(c=>c.id!==evId);
+  saveState();
   render();
 }
 
@@ -656,12 +699,14 @@ function addTask(){
   if(!title) return;
   state.tasks.push({ id: nextId(), title, priority, status:"Not Started", scheduled:null, late:false });
   input.value = "";
+  saveState();
   render();
 }
 
 function updateTaskTitle(id, value){
   const t = state.tasks.find(t=>t.id===id);
   if(t) t.title = value.trim() || t.title;
+  saveState();
   render();
 }
 
@@ -673,6 +718,7 @@ function completeTask(id){
   state.tasks.splice(idx, 1);
   state.calendarEvents = state.calendarEvents.filter(ev=>ev.taskId!==id);
   state.archive.unshift({ id: t.id, title: t.title, priority: t.priority, completedDate: dateKey(state.currentDate) });
+  saveState();
   render();
 }
 
@@ -680,12 +726,14 @@ function setTaskStatus(id, status){
   if(status === "Completed"){ completeTask(id); return; }
   const t = state.tasks.find(t=>t.id===id);
   if(t) t.status = status;
+  saveState();
   render();
 }
 
 function deleteTask(id){
   state.tasks = state.tasks.filter(t=>t.id!==id);
   state.calendarEvents = state.calendarEvents.filter(e=>e.taskId!==id);
+  saveState();
   render();
 }
 
@@ -694,14 +742,17 @@ function deleteTask(id){
    ========================================================= */
 function addNote(){
   state.notes.unshift({ id: nextId(), text:"", ts: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) });
+  saveState();
   render();
 }
 function updateNote(id, text){
   const n = state.notes.find(n=>n.id===id);
   if(n) n.text = text;
+  saveState();
 }
 function deleteNote(id){
   state.notes = state.notes.filter(n=>n.id!==id);
+  saveState();
   render();
 }
 
@@ -737,6 +788,7 @@ function unarchiveTask(id){
   const a = state.archive[idx];
   state.archive.splice(idx, 1);
   state.tasks.push({ id: a.id, title: a.title, priority: a.priority, status:"In Progress", scheduled:null, late:false });
+  saveState();
   renderArchiveList();
   render();
 }
@@ -851,6 +903,7 @@ function carryForward(){
     t.scheduled = null;
   });
   state.calendarEvents = []; // all remaining events belonged to now-unscheduled, rolled-over tasks
+  saveState();
   closeReview();
   render();
 }
@@ -900,6 +953,7 @@ function render(){
         if(t){ t.scheduled = null; }
       }
       state.calendarEvents = state.calendarEvents.filter(c=>c.id!==payload.id);
+      saveState();
       render();
     }
   };
