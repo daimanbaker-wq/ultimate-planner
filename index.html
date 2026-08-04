@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>The Ultimate Planner — Prototype</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --paper:#fbf9f4;
@@ -226,7 +227,7 @@
   }
   .review-btn:hover{ background:var(--accent); color:#fff; }
 
-  /* ---------- Modal ---------- */
+  /* ---------- Modals (general) ---------- */
   .modal-backdrop{
     position:fixed; inset:0; background:rgba(30,25,15,.35); display:none; align-items:center; justify-content:center; z-index:100;
   }
@@ -257,6 +258,37 @@
     100%{ box-shadow:0 0 0 14px rgba(138,122,92,0); }
   }
 
+  /* ---------- Auth screen ---------- */
+  #authScreen{
+    display:flex; align-items:center; justify-content:center; min-height:80vh;
+  }
+  .auth-box{
+    background:var(--paper); border-radius:14px; padding:36px 32px; width:400px; max-width:92vw;
+    box-shadow:var(--shadow); text-align:center;
+  }
+  .auth-box h1{ font-size:24px; margin-bottom:6px; }
+  .auth-box p{ font-size:13px; color:var(--ink-soft); margin-bottom:24px; }
+  .auth-box input{
+    width:100%; border:1px solid var(--rule); border-radius:8px; padding:10px 12px; font-size:14px;
+    font-family:inherit; margin-bottom:12px; background:#fffdf8; outline:none;
+  }
+  .auth-box input:focus{ border-color:var(--accent); }
+  .auth-box .auth-btn{
+    width:100%; padding:10px; border:none; border-radius:8px; background:var(--accent); color:#fff;
+    font-size:14px; cursor:pointer; margin-top:4px;
+  }
+  .auth-box .auth-btn:hover{ opacity:.9; }
+  .auth-box .auth-link{ font-size:12px; color:var(--ink-soft); margin-top:14px; }
+  .auth-box .auth-link a{ color:var(--accent); cursor:pointer; text-decoration:underline; }
+  .auth-box .auth-error{ font-size:12px; color:var(--p1); margin-bottom:8px; }
+
+  /* ---------- Logout btn ---------- */
+  .logout-btn{
+    font-size:11px; color:var(--ink-soft); background:none; border:1px solid var(--rule);
+    border-radius:6px; padding:4px 10px; cursor:pointer;
+  }
+  .logout-btn:hover{ background:var(--paper); }
+
   @media (max-width:860px){
     .book{ grid-template-columns:1fr; }
     .page.left{ border-right:none; border-bottom:1px solid var(--rule); }
@@ -267,14 +299,34 @@
 </head>
 <body>
 
+<!-- ===== AUTH SCREEN (hidden when logged in) ===== -->
+<div id="authScreen">
+  <div class="auth-box">
+    <h1>The Ultimate Planner</h1>
+    <p>Sign in to access your planner across all your devices.</p>
+    <div id="authError" class="auth-error"></div>
+    <input id="authEmail" type="email" placeholder="Email" autocomplete="email">
+    <input id="authPassword" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="auth-btn" id="authLoginBtn" onclick="authLogin()">Sign In</button>
+    <button class="auth-btn" style="background:var(--ink-soft);" id="authSignupBtn" onclick="authSignup()">Create Account</button>
+    <div class="auth-link" id="authStatus"></div>
+  </div>
+</div>
+
+<!-- ===== PLANNER UI (hidden until logged in) ===== -->
+<div id="plannerApp" style="display:none;">
+
 <div class="topbar">
   <div class="brand">
     <h1>The Ultimate Planner</h1>
     <span id="todayLabel"></span>
   </div>
-  <div class="search-wrap">
-    <input id="searchInput" type="text" placeholder="Search tasks, notes, calendar, archive…" autocomplete="off">
-    <div class="search-results" id="searchResults"></div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="search-wrap">
+      <input id="searchInput" type="text" placeholder="Search tasks, notes, calendar, archive…" autocomplete="off">
+      <div class="search-results" id="searchResults"></div>
+    </div>
+    <button class="logout-btn" onclick="authLogout()">Logout</button>
   </div>
 </div>
 
@@ -393,65 +445,227 @@
   </div>
 </div>
 
+</div> <!-- /#plannerApp -->
+
 <script>
 /* =========================================================
-   STATE  (in-memory only — no localStorage, per session)
+   SUPABASE SETUP
+   ========================================================= */
+const SUPABASE_URL = 'https://haavmzktsxbzbxnjphtq.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_z9xtio4zkQNXEGn3F0SAFg_-FkzPzJf';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* =========================================================
+   STATE (in-memory cache, synced to Supabase)
    ========================================================= */
 let idCounter = 1;
 const nextId = () => idCounter++;
+let currentUser = null;
+let loadingData = false;
 
 const state = {
   intention: "",
-  tasks: [],                  // {id, title, priority, status, scheduled:{hour}|null, late}
-  calendarEvents: [],         // {id, taskId, title, priority, hour, date:"YYYY-MM-DD"}
-  notes: [],                  // {id, text, ts}
-  archive: [],                // {id, title, priority, completedDate}
-  currentDate: new Date(),    // date currently shown in Day view
-  viewMonth: new Date(),      // month currently shown in Month view
-  viewYear: new Date()        // year currently shown in Year view
+  tasks: [],
+  calendarEvents: [],
+  notes: [],
+  archive: [],
+  currentDate: new Date(),
+  viewMonth: new Date(),
+  viewYear: new Date()
 };
-
-/* =========================================================
-   PERSISTENCE  (localStorage)
-   ========================================================= */
-function saveState(){
-  const data = {
-    intention: state.intention,
-    tasks: state.tasks,
-    calendarEvents: state.calendarEvents,
-    notes: state.notes,
-    archive: state.archive,
-    currentDate: state.currentDate.toISOString(),
-    viewMonth: state.viewMonth.toISOString(),
-    viewYear: state.viewYear.toISOString(),
-    idCounter: idCounter
-  };
-  try { localStorage.setItem("planner_state", JSON.stringify(data)); } catch(e) { /* storage full or unavailable */ }
-}
-function loadState(){
-  try {
-    const raw = localStorage.getItem("planner_state");
-    if(!raw) return false;
-    const data = JSON.parse(raw);
-    state.intention = data.intention || "";
-    state.tasks = data.tasks || [];
-    state.calendarEvents = data.calendarEvents || [];
-    state.notes = data.notes || [];
-    state.archive = data.archive || [];
-    state.currentDate = data.currentDate ? new Date(data.currentDate) : new Date();
-    state.viewMonth = data.viewMonth ? new Date(data.viewMonth) : new Date();
-    state.viewYear = data.viewYear ? new Date(data.viewYear) : new Date();
-    if(typeof data.idCounter === "number") idCounter = data.idCounter;
-    return true;
-  } catch(e) {
-    return false;
-  }
-}
 
 let currentViewMode = "day";
 
-const HOURS = Array.from({length:16}, (_,i) => 6 + i); // 6:00 - 21:00
+const HOURS = Array.from({length:16}, (_,i) => 6 + i);
 const STATUSES = ["Not Started", "In Progress", "Completed"];
+
+/* =========================================================
+   AUTH
+   ========================================================= */
+async function authLogin(){
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+  const errorEl = document.getElementById("authError");
+  const statusEl = document.getElementById("authStatus");
+  errorEl.textContent = "";
+  if(!email || !password){ errorEl.textContent = "Please enter email and password."; return; }
+  statusEl.textContent = "Signing in…";
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if(error){ errorEl.textContent = error.message; statusEl.textContent = ""; return; }
+  // onAuthStateChange will handle the rest
+}
+
+async function authSignup(){
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+  const errorEl = document.getElementById("authError");
+  const statusEl = document.getElementById("authStatus");
+  errorEl.textContent = "";
+  if(!email || !password){ errorEl.textContent = "Please enter email and password."; return; }
+  if(password.length < 6){ errorEl.textContent = "Password must be at least 6 characters."; return; }
+  statusEl.textContent = "Creating account…";
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if(error){ errorEl.textContent = error.message; statusEl.textContent = ""; return; }
+  statusEl.textContent = "Account created! Check your email for a confirmation link, then sign in.";
+}
+
+async function authLogout(){
+  await supabase.auth.signOut();
+}
+
+// Load user data from Supabase after login
+async function loadUserData(){
+  if(!currentUser) return;
+  loadingData = true;
+  try {
+    // Fetch all data for this user in parallel
+    const [tasksRes, eventsRes, notesRes, archiveRes, intentionRes] = await Promise.all([
+      supabase.from('tasks').select('*').order('id'),
+      supabase.from('calendar_events').select('*').order('id'),
+      supabase.from('notes').select('*').order('id'),
+      supabase.from('archive').select('*').order('id'),
+      supabase.from('intentions').select('*').order('id')
+    ]);
+
+    // Map DB rows to our state format
+    state.tasks = (tasksRes.data || []).map(t => ({
+      id: t.id, title: t.title, priority: t.priority, status: t.status,
+      scheduled: t.scheduled_hour != null ? { hour: t.scheduled_hour } : null,
+      late: t.late
+    }));
+
+    state.calendarEvents = (eventsRes.data || []).map(e => ({
+      id: e.id, taskId: e.task_id, title: e.title, priority: e.priority,
+      hour: e.hour, date: e.date
+    }));
+
+    state.notes = (notesRes.data || []).map(n => ({
+      id: n.id, text: n.text, ts: n.ts
+    }));
+
+    state.archive = (archiveRes.data || []).map(a => ({
+      id: a.id, title: a.title, priority: a.priority, completedDate: a.completed_date
+    }));
+
+    // Load intention for today
+    const todayKey = dateKey(new Date());
+    const todayIntention = (intentionRes.data || []).find(i => i.date === todayKey);
+    state.intention = todayIntention ? todayIntention.intention_text : "";
+
+    // Set idCounter past existing IDs
+    const allIds = [
+      ...state.tasks.map(t=>t.id),
+      ...state.calendarEvents.map(e=>e.id),
+      ...state.notes.map(n=>n.id),
+      ...state.archive.map(a=>a.id)
+    ];
+    idCounter = (allIds.length ? Math.max(...allIds) : 0) + 1;
+
+  } catch(e) {
+    console.error("Error loading data:", e);
+  }
+  loadingData = false;
+  render();
+  if(document.getElementById("intentionInput")){
+    document.getElementById("intentionInput").value = state.intention;
+  }
+}
+
+/* =========================================================
+   SAVE HELPERS (Supabase CRUD)
+   ========================================================= */
+
+// Task operations
+async function supabaseAddTask(task){
+  const { data, error } = await supabase.from('tasks').insert({
+    title: task.title, priority: task.priority, status: task.status || "Not Started",
+    scheduled_hour: task.scheduled ? task.scheduled.hour : null, late: task.late || false
+  }).select();
+  if(!error && data && data[0]) task.id = data[0].id;
+}
+
+async function supabaseUpdateTask(id, updates){
+  await supabase.from('tasks').update(updates).eq('id', id);
+}
+
+async function supabaseDeleteTask(id){
+  await supabase.from('tasks').delete().eq('id', id);
+  await supabase.from('calendar_events').delete().eq('task_id', id);
+}
+
+// Calendar event operations
+async function supabaseAddEvent(event){
+  const { data, error } = await supabase.from('calendar_events').insert({
+    task_id: event.taskId, title: event.title, priority: event.priority,
+    hour: event.hour, date: event.date
+  }).select();
+  if(!error && data && data[0]) event.id = data[0].id;
+}
+
+async function supabaseUpdateEvent(id, updates){
+  await supabase.from('calendar_events').update(updates).eq('id', id);
+}
+
+async function supabaseDeleteEvent(id){
+  await supabase.from('calendar_events').delete().eq('id', id);
+}
+
+// Note operations
+async function supabaseAddNote(note){
+  const { data, error } = await supabase.from('notes').insert({
+    text: note.text, ts: note.ts
+  }).select();
+  if(!error && data && data[0]) note.id = data[0].id;
+}
+
+async function supabaseUpdateNote(id, updates){
+  await supabase.from('notes').update(updates).eq('id', id);
+}
+
+async function supabaseDeleteNote(id){
+  await supabase.from('notes').delete().eq('id', id);
+}
+
+// Archive operations
+async function supabaseAddArchive(item){
+  const { data, error } = await supabase.from('archive').insert({
+    title: item.title, priority: item.priority, completed_date: item.completedDate
+  }).select();
+  if(!error && data && data[0]) item.id = data[0].id;
+}
+
+async function supabaseDeleteArchive(id){
+  await supabase.from('archive').delete().eq('id', id);
+}
+
+// Intention operations
+async function supabaseSaveIntention(text, date){
+  const todayKey = date || dateKey(new Date());
+  // Upsert: try to find existing, update or insert
+  const { data: existing } = await supabase.from('intentions').select('id').eq('date', todayKey).maybeSingle();
+  if(existing){
+    await supabase.from('intentions').update({ intention_text: text }).eq('id', existing.id);
+  } else {
+    await supabase.from('intentions').insert({ intention_text: text, date: todayKey });
+  }
+}
+
+/* =========================================================
+   NOTIFICATIONS (toast for sync feedback)
+   ========================================================= */
+function showToast(msg){
+  let t = document.getElementById("toast");
+  if(!t){
+    t = document.createElement("div");
+    t.id = "toast";
+    t.style.cssText = "position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2b2926;color:#fff;padding:8px 18px;border-radius:20px;font-size:12px;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none;";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = "1";
+  clearTimeout(t._hide);
+  t._hide = setTimeout(() => t.style.opacity = "0", 1500);
+}
 
 /* =========================================================
    INIT
@@ -462,7 +676,6 @@ function fmtHour(h){
   return `${hr}:00 ${period}`;
 }
 
-// Local (not UTC) date key so day boundaries match the user's calendar, not GMT.
 function dateKey(d){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
@@ -471,21 +684,12 @@ function init(){
   document.getElementById("todayLabel").textContent =
     new Date().toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" });
 
-  // Restore saved state from localStorage, or seed examples on first visit
-  const hasSaved = loadState();
-  if(!hasSaved){
-    state.tasks.push({id: nextId(), title:"Prepare Savoy presentation", priority:"p1", status:"Not Started", scheduled:null, late:false});
-    state.tasks.push({id: nextId(), title:"Review Q3 board pack", priority:"p2", status:"Not Started", scheduled:null, late:false});
-    state.notes.push({id: nextId(), text:"", ts: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})});
-    state.archive.push({id: nextId(), title:"Confirm venue for offsite", priority:"p3", completedDate: dateKey(new Date())});
-  }
-
   buildDayView();
   render();
 
   document.getElementById("intentionInput").addEventListener("input", e=>{
     state.intention = e.target.value;
-    saveState();
+    if(currentUser && !loadingData) supabaseSaveIntention(state.intention);
   });
   document.getElementById("searchInput").addEventListener("input", runSearch);
   document.addEventListener("click", (e)=>{
@@ -493,8 +697,34 @@ function init(){
   });
 }
 
+// Check auth state on page load
+supabase.auth.onAuthStateChange((event, session) => {
+  if(session && session.user){
+    currentUser = session.user;
+    document.getElementById("authScreen").style.display = "none";
+    document.getElementById("plannerApp").style.display = "";
+    init();
+    loadUserData();
+  } else {
+    currentUser = null;
+    document.getElementById("authScreen").style.display = "";
+    document.getElementById("plannerApp").style.display = "none";
+  }
+});
+
+// Initial auth check
+supabase.auth.getSession().then(({ data: { session } }) => {
+  if(session && session.user){
+    currentUser = session.user;
+    document.getElementById("authScreen").style.display = "none";
+    document.getElementById("plannerApp").style.display = "";
+    init();
+    loadUserData();
+  }
+});
+
 /* =========================================================
-   VIEW SWITCHING — Day / Month / Year
+   VIEW SWITCHING
    ========================================================= */
 function switchView(view){
   currentViewMode = view;
@@ -568,24 +798,30 @@ function buildDayView(){
   });
 }
 
-function handleDropOnCalendar(payload, hour){
+async function handleDropOnCalendar(payload, hour){
   const today = dateKey(state.currentDate);
   if(payload.kind === "task"){
     const task = state.tasks.find(t=>t.id===payload.id);
     if(!task) return;
     task.scheduled = { hour };
-    task.late = false; // rescheduling resolves a rollover
-    state.calendarEvents.push({ id: nextId(), taskId: task.id, title: task.title, priority: task.priority, hour, date: today });
+    task.late = false;
+    const ev = { id: nextId(), taskId: task.id, title: task.title, priority: task.priority, hour, date: today };
+    state.calendarEvents.push(ev);
+    if(currentUser){
+      await Promise.all([
+        supabaseUpdateTask(task.id, { scheduled_hour: hour, late: false }),
+        supabaseAddEvent(ev)
+      ]);
+    }
   } else if(payload.kind === "calEvent"){
-    // moving an existing event to a new hour (same day)
     const ev = state.calendarEvents.find(c=>c.id===payload.id);
     if(ev){ ev.hour = hour; const t = state.tasks.find(t=>t.id===ev.taskId); if(t) t.scheduled = {hour}; }
+    if(currentUser && ev) await supabaseUpdateEvent(ev.id, { hour });
   }
-  saveState();
   render();
 }
 
-function removeCalEvent(evId){
+async function removeCalEvent(evId){
   const ev = state.calendarEvents.find(c=>c.id===evId);
   if(!ev) return;
   if(ev.taskId){
@@ -593,7 +829,7 @@ function removeCalEvent(evId){
     if(task){ task.scheduled = null; }
   }
   state.calendarEvents = state.calendarEvents.filter(c=>c.id!==evId);
-  saveState();
+  if(currentUser) await supabaseDeleteEvent(evId);
   render();
 }
 
@@ -617,7 +853,7 @@ function buildMonthView(){
   const year = viewMonth.getFullYear();
   const month = viewMonth.getMonth();
   const firstOfMonth = new Date(year, month, 1);
-  const startOffset = (firstOfMonth.getDay() + 6) % 7;           // Monday-first index
+  const startOffset = (firstOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const daysInPrevMonth = new Date(year, month, 0).getDate();
   const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
@@ -692,67 +928,77 @@ function buildYearView(){
 /* =========================================================
    TASKS
    ========================================================= */
-function addTask(){
+async function addTask(){
   const input = document.getElementById("taskInput");
   const priority = document.getElementById("taskPriority").value;
   const title = input.value.trim();
   if(!title) return;
-  state.tasks.push({ id: nextId(), title, priority, status:"Not Started", scheduled:null, late:false });
+  const task = { id: nextId(), title, priority, status:"Not Started", scheduled:null, late:false };
+  state.tasks.push(task);
   input.value = "";
-  saveState();
+  if(currentUser) await supabaseAddTask(task);
+  showToast("Task added");
   render();
 }
 
-function updateTaskTitle(id, value){
+async function updateTaskTitle(id, value){
   const t = state.tasks.find(t=>t.id===id);
   if(t) t.title = value.trim() || t.title;
-  saveState();
+  if(currentUser) await supabaseUpdateTask(id, { title: t.title });
   render();
 }
 
-// Marking a task complete archives it immediately, keeping the To-Do list short.
-function completeTask(id){
+async function completeTask(id){
   const idx = state.tasks.findIndex(t=>t.id===id);
   if(idx === -1) return;
   const t = state.tasks[idx];
   state.tasks.splice(idx, 1);
   state.calendarEvents = state.calendarEvents.filter(ev=>ev.taskId!==id);
-  state.archive.unshift({ id: t.id, title: t.title, priority: t.priority, completedDate: dateKey(state.currentDate) });
-  saveState();
+  const arch = { id: t.id, title: t.title, priority: t.priority, completedDate: dateKey(state.currentDate) };
+  state.archive.unshift(arch);
+  if(currentUser){
+    await Promise.all([
+      supabaseDeleteTask(id),
+      supabaseAddArchive(arch)
+    ]);
+  }
+  showToast("Task completed");
   render();
 }
 
-function setTaskStatus(id, status){
+async function setTaskStatus(id, status){
   if(status === "Completed"){ completeTask(id); return; }
   const t = state.tasks.find(t=>t.id===id);
   if(t) t.status = status;
-  saveState();
+  if(currentUser) await supabaseUpdateTask(id, { status });
   render();
 }
 
-function deleteTask(id){
+async function deleteTask(id){
   state.tasks = state.tasks.filter(t=>t.id!==id);
   state.calendarEvents = state.calendarEvents.filter(e=>e.taskId!==id);
-  saveState();
+  if(currentUser) await supabaseDeleteTask(id);
+  showToast("Task deleted");
   render();
 }
 
 /* =========================================================
    NOTES
    ========================================================= */
-function addNote(){
-  state.notes.unshift({ id: nextId(), text:"", ts: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) });
-  saveState();
+async function addNote(){
+  const note = { id: nextId(), text:"", ts: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) };
+  state.notes.unshift(note);
+  if(currentUser) await supabaseAddNote(note);
   render();
 }
-function updateNote(id, text){
+async function updateNote(id, text){
   const n = state.notes.find(n=>n.id===id);
   if(n) n.text = text;
-  saveState();
+  if(currentUser) await supabaseUpdateNote(id, { text });
 }
-function deleteNote(id){
+async function deleteNote(id){
   state.notes = state.notes.filter(n=>n.id!==id);
-  saveState();
+  if(currentUser) await supabaseDeleteNote(id);
   render();
 }
 
@@ -781,20 +1027,25 @@ function renderArchiveList(){
     : `<div class="empty-note">No completed items yet.</div>`;
 }
 
-// Move a completed item back to the active To-Do list — for when "done" turns out to need more work.
-function unarchiveTask(id){
+async function unarchiveTask(id){
   const idx = state.archive.findIndex(a=>a.id===id);
   if(idx === -1) return;
   const a = state.archive[idx];
   state.archive.splice(idx, 1);
-  state.tasks.push({ id: a.id, title: a.title, priority: a.priority, status:"In Progress", scheduled:null, late:false });
-  saveState();
+  const task = { id: a.id, title: a.title, priority: a.priority, status:"In Progress", scheduled:null, late:false };
+  state.tasks.push(task);
+  if(currentUser){
+    await Promise.all([
+      supabaseDeleteArchive(id),
+      supabaseAddTask(task)
+    ]);
+  }
   renderArchiveList();
   render();
 }
 
 /* =========================================================
-   SEARCH — global, across intention/tasks/calendar/notes/archive
+   SEARCH
    ========================================================= */
 function runSearch(e){
   const q = e.target.value.trim().toLowerCase();
@@ -897,13 +1148,22 @@ function openReview(){
   document.getElementById("reviewModal").classList.add("show");
 }
 function closeReview(){ document.getElementById("reviewModal").classList.remove("show"); }
-function carryForward(){
+async function carryForward(){
   state.tasks.forEach(t=>{
     t.late = true;
     t.scheduled = null;
   });
-  state.calendarEvents = []; // all remaining events belonged to now-unscheduled, rolled-over tasks
-  saveState();
+  state.calendarEvents = [];
+  if(currentUser){
+    for(const t of state.tasks){
+      await supabaseUpdateTask(t.id, { late: true, scheduled_hour: null });
+    }
+    // Delete all calendar events
+    const myEvents = state.calendarEvents;
+    for(const e of myEvents){
+      await supabaseDeleteEvent(e.id);
+    }
+  }
   closeReview();
   render();
 }
@@ -953,12 +1213,12 @@ function render(){
         if(t){ t.scheduled = null; }
       }
       state.calendarEvents = state.calendarEvents.filter(c=>c.id!==payload.id);
-      saveState();
+      if(currentUser) supabaseDeleteEvent(payload.id);
       render();
     }
   };
 
-  // ---- Day label + calendar events (for the currently viewed date) ----
+  // ---- Day label + calendar events ----
   updateDayLabel();
   const viewedDate = dateKey(state.currentDate);
   document.querySelectorAll(".hour-slot").forEach(slot=>{
@@ -993,12 +1253,11 @@ function render(){
     notesList.appendChild(card);
   });
 
-  // ---- Keep Month/Year view in sync if currently open ----
+  // ---- Keep Month/Year view in sync ----
   if(currentViewMode === "month") buildMonthView();
   if(currentViewMode === "year") buildYearView();
 }
 
-init();
 </script>
 </body>
 </html>
