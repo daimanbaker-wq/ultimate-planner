@@ -453,7 +453,8 @@
    ========================================================= */
 const SUPABASE_URL = 'https://haavmzktsxbzbxnjphtq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_z9xtio4zkQNXEGn3F0SAFg_-FkzPzJf';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+console.log('Supabase client initialized:', !!_supabase.auth);
 
 /* =========================================================
    STATE (in-memory cache, synced to Supabase)
@@ -490,7 +491,7 @@ async function authLogin(){
   errorEl.textContent = "";
   if(!email || !password){ errorEl.textContent = "Please enter email and password."; return; }
   statusEl.textContent = "Signing in…";
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
   if(error){ errorEl.textContent = error.message; statusEl.textContent = ""; return; }
   // onAuthStateChange will handle the rest
 }
@@ -504,13 +505,13 @@ async function authSignup(){
   if(!email || !password){ errorEl.textContent = "Please enter email and password."; return; }
   if(password.length < 6){ errorEl.textContent = "Password must be at least 6 characters."; return; }
   statusEl.textContent = "Creating account…";
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await _supabase.auth.signUp({ email, password });
   if(error){ errorEl.textContent = error.message; statusEl.textContent = ""; return; }
   statusEl.textContent = "Account created! Check your email for a confirmation link, then sign in.";
 }
 
 async function authLogout(){
-  await supabase.auth.signOut();
+  await _supabase.auth.signOut();
 }
 
 // Load user data from Supabase after login
@@ -520,11 +521,11 @@ async function loadUserData(){
   try {
     // Fetch all data for this user in parallel
     const [tasksRes, eventsRes, notesRes, archiveRes, intentionRes] = await Promise.all([
-      supabase.from('tasks').select('*').order('id'),
-      supabase.from('calendar_events').select('*').order('id'),
-      supabase.from('notes').select('*').order('id'),
-      supabase.from('archive').select('*').order('id'),
-      supabase.from('intentions').select('*').order('id')
+      _supabase.from('tasks').select('*').order('id'),
+      _supabase.from('calendar_events').select('*').order('id'),
+      _supabase.from('notes').select('*').order('id'),
+      _supabase.from('archive').select('*').order('id'),
+      _supabase.from('intentions').select('*').order('id')
     ]);
 
     // Map DB rows to our state format
@@ -577,7 +578,7 @@ async function loadUserData(){
 
 // Task operations
 async function supabaseAddTask(task){
-  const { data, error } = await supabase.from('tasks').insert({
+  const { data, error } = await _supabase.from('tasks').insert({
     title: task.title, priority: task.priority, status: task.status || "Not Started",
     scheduled_hour: task.scheduled ? task.scheduled.hour : null, late: task.late || false
   }).select();
@@ -585,17 +586,17 @@ async function supabaseAddTask(task){
 }
 
 async function supabaseUpdateTask(id, updates){
-  await supabase.from('tasks').update(updates).eq('id', id);
+  await _supabase.from('tasks').update(updates).eq('id', id);
 }
 
 async function supabaseDeleteTask(id){
-  await supabase.from('tasks').delete().eq('id', id);
-  await supabase.from('calendar_events').delete().eq('task_id', id);
+  await _supabase.from('tasks').delete().eq('id', id);
+  await _supabase.from('calendar_events').delete().eq('task_id', id);
 }
 
 // Calendar event operations
 async function supabaseAddEvent(event){
-  const { data, error } = await supabase.from('calendar_events').insert({
+  const { data, error } = await _supabase.from('calendar_events').insert({
     task_id: event.taskId, title: event.title, priority: event.priority,
     hour: event.hour, date: event.date
   }).select();
@@ -603,50 +604,50 @@ async function supabaseAddEvent(event){
 }
 
 async function supabaseUpdateEvent(id, updates){
-  await supabase.from('calendar_events').update(updates).eq('id', id);
+  await _supabase.from('calendar_events').update(updates).eq('id', id);
 }
 
 async function supabaseDeleteEvent(id){
-  await supabase.from('calendar_events').delete().eq('id', id);
+  await _supabase.from('calendar_events').delete().eq('id', id);
 }
 
 // Note operations
 async function supabaseAddNote(note){
-  const { data, error } = await supabase.from('notes').insert({
+  const { data, error } = await _supabase.from('notes').insert({
     text: note.text, ts: note.ts
   }).select();
   if(!error && data && data[0]) note.id = data[0].id;
 }
 
 async function supabaseUpdateNote(id, updates){
-  await supabase.from('notes').update(updates).eq('id', id);
+  await _supabase.from('notes').update(updates).eq('id', id);
 }
 
 async function supabaseDeleteNote(id){
-  await supabase.from('notes').delete().eq('id', id);
+  await _supabase.from('notes').delete().eq('id', id);
 }
 
 // Archive operations
 async function supabaseAddArchive(item){
-  const { data, error } = await supabase.from('archive').insert({
+  const { data, error } = await _supabase.from('archive').insert({
     title: item.title, priority: item.priority, completed_date: item.completedDate
   }).select();
   if(!error && data && data[0]) item.id = data[0].id;
 }
 
 async function supabaseDeleteArchive(id){
-  await supabase.from('archive').delete().eq('id', id);
+  await _supabase.from('archive').delete().eq('id', id);
 }
 
 // Intention operations
 async function supabaseSaveIntention(text, date){
   const todayKey = date || dateKey(new Date());
   // Upsert: try to find existing, update or insert
-  const { data: existing } = await supabase.from('intentions').select('id').eq('date', todayKey).maybeSingle();
+  const { data: existing } = await _supabase.from('intentions').select('id').eq('date', todayKey).maybeSingle();
   if(existing){
-    await supabase.from('intentions').update({ intention_text: text }).eq('id', existing.id);
+    await _supabase.from('intentions').update({ intention_text: text }).eq('id', existing.id);
   } else {
-    await supabase.from('intentions').insert({ intention_text: text, date: todayKey });
+    await _supabase.from('intentions').insert({ intention_text: text, date: todayKey });
   }
 }
 
@@ -698,7 +699,7 @@ function init(){
 }
 
 // Check auth state on page load
-supabase.auth.onAuthStateChange((event, session) => {
+_supabase.auth.onAuthStateChange((event, session) => {
   if(session && session.user){
     currentUser = session.user;
     document.getElementById("authScreen").style.display = "none";
@@ -713,7 +714,7 @@ supabase.auth.onAuthStateChange((event, session) => {
 });
 
 // Initial auth check
-supabase.auth.getSession().then(({ data: { session } }) => {
+_supabase.auth.getSession().then(({ data: { session } }) => {
   if(session && session.user){
     currentUser = session.user;
     document.getElementById("authScreen").style.display = "none";
