@@ -505,7 +505,13 @@ async function authSignup(){
   if(!email || !password){ errorEl.textContent = "Please enter email and password."; return; }
   if(password.length < 6){ errorEl.textContent = "Password must be at least 6 characters."; return; }
   statusEl.textContent = "Creating account…";
-  const { data, error } = await _supabase.auth.signUp({ email, password });
+  const { data, error } = await _supabase.auth.signUp({ 
+    email, 
+    password,
+    options: {
+      emailRedirectTo: 'https://daimanbaker-wq.github.io/ultimate-planner/'
+    }
+  });
   if(error){ errorEl.textContent = error.message; statusEl.textContent = ""; return; }
   statusEl.textContent = "Account created! Check your email for a confirmation link, then sign in.";
 }
